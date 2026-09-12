@@ -10,8 +10,15 @@ connectDB();
 
 const app = express();
 
-// Allowed frontend origins (User Portal, Admin Portal, Landing Page)
-const allowedOrigins = [
+// Allowed frontend origins from environment variables with local defaults
+const envOrigins = [
+  process.env.FRONTEND_BASE_URL,
+  process.env.ADMIN_BASE_URL,
+  process.env.LANDING_BASE_URL,
+  ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()) : [])
+].filter(Boolean);
+
+const defaultOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
@@ -19,6 +26,8 @@ const allowedOrigins = [
   'http://127.0.0.1:5174',
   'http://127.0.0.1:5175',
 ];
+
+const allowedOrigins = Array.from(new Set([...envOrigins, ...defaultOrigins]));
 
 // Middlewares
 app.use(cors({
