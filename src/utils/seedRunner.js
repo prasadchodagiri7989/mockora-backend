@@ -26,16 +26,16 @@ const runSeed = async () => {
 
     // 1. Create Users
     const adminUser = await User.create({
-      name: 'Dr. Sarah Jenkins',
-      email: 'admin@universalmock.com',
-      password: 'Admin@123',
+      name: 'Prasad Chodagiri',
+      email: 'chodagiriprasad5@gmail.com',
+      password: 'Yashu@1818',
       role: 'admin',
       targetExam: 'Administration & Curricula',
       streakDays: 14,
     });
 
     const studentUser = await User.create({
-      name: 'Alex Rivera',
+      name: 'Alex Rivera (Example Student)',
       email: 'student@universalmock.com',
       password: 'Student@123',
       role: 'user',
@@ -43,25 +43,7 @@ const runSeed = async () => {
       streakDays: 6,
     });
 
-    const student2 = await User.create({
-      name: 'Priya Sharma',
-      email: 'priya@universalmock.com',
-      password: 'Student@123',
-      role: 'user',
-      targetExam: 'NEET UG',
-      streakDays: 12,
-    });
-
-    const student3 = await User.create({
-      name: 'Rohan Mehta',
-      email: 'rohan@universalmock.com',
-      password: 'Student@123',
-      role: 'user',
-      targetExam: 'IIT-JEE',
-      streakDays: 4,
-    });
-
-    console.log('[Seed] Users created: admin@universalmock.com, student@universalmock.com');
+    console.log('[Seed] Users created: chodagiriprasad5@gmail.com, student@universalmock.com');
 
     // 2. Create Categories
     const categoriesData = [

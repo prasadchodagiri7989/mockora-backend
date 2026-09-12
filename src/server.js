@@ -50,7 +50,7 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date(),
-    service: 'Universal Mock Test Platform API',
+    service: 'MockOra Platform API',
   });
 });
 
@@ -65,6 +65,7 @@ app.use('/api/resources', require('./routes/resourceRoutes'));
 app.use('/api/jobs', require('./routes/jobRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
 
 // 404 Route handler
 app.use((req, res, next) => {
@@ -83,8 +84,9 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(`=============================================`);
-  console.log(`🚀 Universal Mock Test API Server running on port ${PORT}`);
+  console.log(`🚀 MockOra API Server running on port ${PORT}`);
   console.log(`🌐 Base URL: http://localhost:${PORT}`);
+  console.log(`🤖 Gemini AI Review: ${process.env.GEMINI_API_KEY ? `Enabled (${process.env.GEMINI_MODEL || 'gemini-1.5-flash'})` : 'Disabled (Key missing)'}`);
   console.log(`=============================================`);
 });
 

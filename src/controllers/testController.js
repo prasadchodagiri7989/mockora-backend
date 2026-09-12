@@ -62,6 +62,7 @@ exports.getTestById = async (req, res) => {
       const sanitizedQuestions = test.questions.map(q => ({
         _id: q._id,
         text: q.text,
+        section: q.section || '',
         questionType: q.questionType || 'single',
         codeSnippet: q.codeSnippet,
         passageSnippet: q.passageSnippet,
@@ -94,6 +95,7 @@ exports.createTest = async (req, res) => {
       description,
       instructions,
       tags,
+      sections,
       categoryId,
       type,
       difficulty,
@@ -113,7 +115,7 @@ exports.createTest = async (req, res) => {
       const createdQuestions = await Promise.all(
         questions.map(q => {
           if (q._id && typeof q._id === 'string' && q._id.length === 24 && !q.isNew) return q._id;
-          const qData = { ...q, categoryId };
+          const qData = { ...q, categoryId, section: q.section || '' };
           delete qData._id;
           return Question.create(qData);
         })
@@ -126,6 +128,7 @@ exports.createTest = async (req, res) => {
       description: description || '',
       instructions: instructions || '',
       tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t => t.trim()) : []),
+      sections: Array.isArray(sections) ? sections : [],
       categoryId,
       type: type || 'mock',
       difficulty: difficulty || 'Medium',
@@ -169,6 +172,7 @@ exports.updateTest = async (req, res) => {
       timing,
       instructions,
       tags,
+      sections,
       totalMarks,
       passingMarks,
       status,
@@ -179,6 +183,7 @@ exports.updateTest = async (req, res) => {
     if (description !== undefined) test.description = description;
     if (instructions !== undefined) test.instructions = instructions;
     if (tags !== undefined) test.tags = Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t => t.trim()) : []);
+    if (sections !== undefined) test.sections = Array.isArray(sections) ? sections : [];
     if (categoryId) test.categoryId = categoryId;
     if (difficulty) test.difficulty = difficulty;
     if (timing) test.timing = { ...test.timing, ...timing };
@@ -191,10 +196,10 @@ exports.updateTest = async (req, res) => {
       const resolvedIds = [];
       for (const q of questions) {
         if (q._id && typeof q._id === 'string' && q._id.length === 24) {
-          await Question.findByIdAndUpdate(q._id, q);
+          await Question.findByIdAndUpdate(q._id, q, { new: true });
           resolvedIds.push(q._id);
         } else {
-          const newQ = await Question.create({ ...q, categoryId: test.categoryId });
+          const newQ = await Question.create({ ...q, categoryId: test.categoryId, section: q.section || '' });
           resolvedIds.push(newQ._id);
         }
       }

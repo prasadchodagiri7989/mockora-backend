@@ -93,6 +93,9 @@ const attemptSchema = new mongoose.Schema({
     suggestedTopics: [{ type: String }],
     summaryText: { type: String, default: '' },
     recommendedResources: [{ type: String }],
+    preparationConcepts: [{ type: String }],
+    timeManagementTip: { type: String, default: '' },
+    aiProvider: { type: String, default: 'built-in' },
     generatedAt: { type: Date, default: Date.now },
   },
 }, { timestamps: true });

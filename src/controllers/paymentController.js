@@ -70,7 +70,9 @@ const provisionUserAndSendEmail = async (order) => {
       temporaryPassword: temporaryPassword || '(Your existing password remains active)',
       category: order.category,
       orderId: order.cashfreeOrderId,
+      transactionId: order.transactionId || order.cfPaymentId || order.cashfreeOrderId,
       amountPaid: order.amount,
+      paymentDate: order.paidAt ? new Date(order.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
     });
     order.credentialsSent = emailResult.success;
   } catch (err) {
@@ -241,8 +243,14 @@ exports.handleWebhook = async (req, res) => {
     if (type === 'PAYMENT_SUCCESS_WEBHOOK' || type === 'ORDER_PAID_WEBHOOK' || orderData.order_status === 'PAID') {
       const order = await Order.findOne({ cashfreeOrderId });
       if (order) {
+        const paymentObj = eventData.data?.payment || {};
         order.status = 'paid';
-        order.paymentMethod = eventData.data?.payment?.payment_method || 'Online';
+        order.paymentMethod = paymentObj.payment_method?.type || paymentObj.payment_group || (typeof paymentObj.payment_method === 'string' ? paymentObj.payment_method : 'Online');
+        order.cfPaymentId = paymentObj.cf_payment_id ? String(paymentObj.cf_payment_id) : '';
+        order.transactionId = order.cfPaymentId || paymentObj.payment_id || `TXN_${Date.now()}`;
+        order.bankReference = paymentObj.bank_reference || '';
+        order.paidAt = paymentObj.payment_time ? new Date(paymentObj.payment_time) : new Date();
+        order.paymentDetails = eventData.data || eventData;
         await order.save();
 
         // Auto-provision user account & send credentials
@@ -276,6 +284,11 @@ exports.getOrderStatus = async (req, res) => {
     if (order.status !== 'paid') {
       if (req.query.simulate === 'true' && process.env.NODE_ENV !== 'production') {
         order.status = 'paid';
+        order.paidAt = new Date();
+        order.paymentMethod = 'Simulated UPI';
+        order.transactionId = `SIM_TXN_${Date.now()}`;
+        order.cfPaymentId = `CF_SIM_${Date.now()}`;
+        order.bankReference = `REF_${Date.now().toString().slice(-6)}`;
         await order.save();
         await provisionUserAndSendEmail(order);
       } else {
@@ -283,6 +296,11 @@ exports.getOrderStatus = async (req, res) => {
           const cashfreeStatus = await cashfreeService.getCashfreeOrderStatus(orderId);
           if (cashfreeStatus.order_status === 'PAID') {
             order.status = 'paid';
+            order.paidAt = order.paidAt || new Date();
+            if (!order.transactionId) {
+              order.transactionId = cashfreeStatus.cf_order_id ? `CF_${cashfreeStatus.cf_order_id}` : `TXN_${Date.now()}`;
+            }
+            order.paymentDetails = cashfreeStatus;
             await order.save();
             // Ensure user is provisioned
             await provisionUserAndSendEmail(order);
@@ -300,12 +318,16 @@ exports.getOrderStatus = async (req, res) => {
       success: true,
       order: {
         orderId: order.cashfreeOrderId,
+        transactionId: order.transactionId || order.cfPaymentId || order.cashfreeOrderId,
         name: order.name,
         email: order.email,
+        mobile: order.mobile,
         category: order.category,
         occupation: order.occupation,
         amount: order.amount,
         status: order.status,
+        paymentMethod: order.paymentMethod,
+        paidAt: order.paidAt,
         userProvisioned: order.userProvisioned,
         credentialsSent: order.credentialsSent,
         createdAt: order.createdAt,
@@ -314,5 +336,94 @@ exports.getOrderStatus = async (req, res) => {
   } catch (err) {
     console.error('Get order status error:', err);
     res.status(500).json({ success: false, message: 'Failed to fetch order status' });
+  }
+};
+
+/**
+ * 5. Admin: Get all transactions & order payments with summary stats
+ * GET /api/payments/transactions
+ */
+exports.getAllTransactions = async (req, res) => {
+  try {
+    const { status, category, search, page = 1, limit = 50 } = req.query;
+    const filter = {};
+
+    if (status && status !== 'all') {
+      filter.status = status;
+    }
+
+    if (category && category !== 'all') {
+      filter.category = category;
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      filter.$or = [
+        { name: { $regex: s, $options: 'i' } },
+        { email: { $regex: s, $options: 'i' } },
+        { mobile: { $regex: s, $options: 'i' } },
+        { cashfreeOrderId: { $regex: s, $options: 'i' } },
+        { transactionId: { $regex: s, $options: 'i' } },
+        { couponCode: { $regex: s, $options: 'i' } },
+      ];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const [orders, totalCount, allPaidOrders, statusStats] = await Promise.all([
+      Order.find(filter)
+        .populate('userId', 'name email role')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit)),
+      Order.countDocuments(filter),
+      Order.find({ status: 'paid' }, 'amount'),
+      Order.aggregate([
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            revenue: { $sum: '$amount' },
+          },
+        },
+      ]),
+    ]);
+
+    const totalRevenue = allPaidOrders.reduce((sum, o) => sum + (o.amount || 0), 0);
+    const paidCount = allPaidOrders.length;
+
+    const statsMap = {
+      paid: { count: 0, revenue: 0 },
+      created: { count: 0, revenue: 0 },
+      failed: { count: 0, revenue: 0 },
+      expired: { count: 0, revenue: 0 },
+    };
+
+    statusStats.forEach(st => {
+      if (statsMap[st._id]) {
+        statsMap[st._id] = { count: st.count, revenue: st.revenue };
+      }
+    });
+
+    res.json({
+      success: true,
+      orders,
+      pagination: {
+        total: totalCount,
+        page: Number(page),
+        limit: Number(limit),
+        totalPages: Math.ceil(totalCount / Number(limit)),
+      },
+      stats: {
+        totalRevenue,
+        paidCount,
+        createdCount: statsMap.created.count,
+        failedCount: statsMap.failed.count + statsMap.expired.count,
+        averageOrderValue: paidCount > 0 ? Math.round(totalRevenue / paidCount) : 0,
+      },
+    });
+  } catch (err) {
+    console.error('Get all transactions error:', err);
+    res.status(500).json({ success: false, message: err.message || 'Failed to fetch transactions' });
   }
 };

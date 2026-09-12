@@ -56,6 +56,18 @@ const testSchema = new mongoose.Schema({
     type: String,
     trim: true,
   }],
+  sections: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    description: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+  }],
   questions: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Question',

@@ -57,6 +57,11 @@ const questionSchema = new mongoose.Schema({
     ref: 'Category',
     required: true,
   },
+  section: {
+    type: String,
+    default: '',
+    trim: true,
+  },
   subject: {
     type: String,
     default: 'General',
@@ -67,7 +72,7 @@ const questionSchema = new mongoose.Schema({
   },
   difficulty: {
     type: String,
-    enum: ['Easy', 'Medium', 'Hard'],
+    enum: ['Easy', 'Medium', 'Hard', 'Very Hard'],
     default: 'Medium',
   },
   type: {

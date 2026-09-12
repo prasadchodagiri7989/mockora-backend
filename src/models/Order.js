@@ -62,6 +62,27 @@ const orderSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  transactionId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  cfPaymentId: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  bankReference: {
+    type: String,
+    trim: true,
+    default: '',
+  },
+  paidAt: {
+    type: Date,
+  },
+  paymentDetails: {
+    type: mongoose.Schema.Types.Mixed,
+  },
   userProvisioned: {
     type: Boolean,
     default: false,
