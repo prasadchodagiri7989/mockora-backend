@@ -5,6 +5,10 @@ const nodemailer = require('nodemailer');
  * Supports standard SMTP (Gmail, Outlook, custom SMTP server, AWS SES, SendGrid, etc.)
  */
 const createTransporter = () => {
+  try {
+    require('dotenv').config();
+  } catch (e) {}
+
   const host = process.env.SMTP_HOST || 'smtp.gmail.com';
   const port = Number(process.env.SMTP_PORT) || 587;
   const user = process.env.SMTP_USER;
@@ -12,6 +16,7 @@ const createTransporter = () => {
   const secure = process.env.SMTP_SECURE === 'true' || port === 465;
 
   if (!user || !pass) {
+    console.warn('[SMTP Notice] SMTP_USER or SMTP_PASS not set in environment.');
     return null; // SMTP unconfigured, fallback to rich console preview
   }
 
@@ -46,10 +51,10 @@ const sendWelcomeEmail = async ({
   paymentDate = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
 }) => {
   const loginUrl = `${process.env.FRONTEND_BASE_URL || 'http://localhost:5173'}/login`;
-  const fromAddress = process.env.EMAIL_FROM || '"Universal Mock Test" <no-reply@universalmock.com>';
+  const fromAddress = process.env.EMAIL_FROM || '"MockOra" <neuvexa.services@gmail.com>';
   const displayTxnId = transactionId || orderId || 'CF_TXN_' + Date.now();
 
-  const subject = `Order Confirmed: Your Universal Mock Test Access is Ready 🎉`;
+  const subject = `Order Confirmed: Your MockOra Access is Ready 🎉`;
 
   const htmlContent = `
 <!DOCTYPE html>
