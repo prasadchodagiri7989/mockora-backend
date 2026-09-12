@@ -7,7 +7,8 @@
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
     "seed": "node src/utils/seedRunner.js",
-    "seed:dmat": "node src/utils/seedDMAT.js"
+    "seed:dmat": "node src/utils/seedDMAT.js",
+    "seed:atlas": "node scripts/migrate_to_atlas.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
