@@ -3,7 +3,9 @@ const crypto = require('crypto');
 
 const getBaseUrl = () => {
   const env = (process.env.CASHFREE_ENV || 'SANDBOX').toUpperCase();
-  return env === 'PRODUCTION'
+  const secretKey = process.env.CASHFREE_SECRET_KEY || '';
+  const isProd = env === 'PRODUCTION' || secretKey.startsWith('cfsk_ma_prod_');
+  return isProd
     ? 'https://api.cashfree.com/pg'
     : 'https://sandbox.cashfree.com/pg';
 };
@@ -105,6 +107,28 @@ const getCashfreeOrderStatus = async (orderId) => {
 };
 
 /**
+ * Fetch Payments list for an Order from Cashfree
+ */
+const getCashfreeOrderPayments = async (orderId) => {
+  const appId = process.env.CASHFREE_APP_ID;
+  const secretKey = process.env.CASHFREE_SECRET_KEY;
+
+  if (!appId || !secretKey) {
+    return [];
+  }
+
+  try {
+    const res = await axios.get(`${getBaseUrl()}/orders/${orderId}/payments`, {
+      headers: getHeaders(),
+    });
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (err) {
+    console.error('[Cashfree Fetch Payments Error]', err.response?.data || err.message);
+    return [];
+  }
+};
+
+/**
  * Verify Webhook Signature (HMAC SHA-256)
  */
 const verifyWebhookSignature = (signature, timestamp, rawBody) => {
@@ -125,5 +149,6 @@ const verifyWebhookSignature = (signature, timestamp, rawBody) => {
 module.exports = {
   createCashfreeOrder,
   getCashfreeOrderStatus,
+  getCashfreeOrderPayments,
   verifyWebhookSignature,
 };

@@ -299,7 +299,10 @@ exports.getOrderStatus = async (req, res) => {
 
     // If order is not yet marked paid, verify directly with Cashfree
     if (order.status !== 'paid') {
-      if (req.query.simulate === 'true' && process.env.NODE_ENV !== 'production') {
+      const hasCashfreeKeys = Boolean(process.env.CASHFREE_APP_ID && process.env.CASHFREE_SECRET_KEY);
+
+      // Simulation ONLY allowed if explicitly requested AND real Cashfree credentials are NOT configured
+      if (!hasCashfreeKeys && req.query.simulate === 'true' && process.env.NODE_ENV !== 'production') {
         order.status = 'paid';
         order.paidAt = new Date();
         order.paymentMethod = 'Simulated UPI';
@@ -308,9 +311,11 @@ exports.getOrderStatus = async (req, res) => {
         order.bankReference = `REF_${Date.now().toString().slice(-6)}`;
         await order.save();
         await provisionUserAndSendEmail(order);
-      } else {
+      } else if (hasCashfreeKeys) {
         try {
           const cashfreeStatus = await cashfreeService.getCashfreeOrderStatus(orderId);
+          console.log(`[Order Status Check] Cashfree order_status for ${orderId}:`, cashfreeStatus.order_status);
+
           if (cashfreeStatus.order_status === 'PAID') {
             order.status = 'paid';
             order.paidAt = order.paidAt || new Date();
@@ -324,6 +329,33 @@ exports.getOrderStatus = async (req, res) => {
           } else if (cashfreeStatus.order_status === 'EXPIRED') {
             order.status = 'expired';
             await order.save();
+          } else if (cashfreeStatus.order_status === 'TERMINATED' || cashfreeStatus.order_status === 'CANCELLED') {
+            order.status = 'failed';
+            await order.save();
+          } else {
+            // Order is still ACTIVE; check if any payment attempt failed or was dropped
+            try {
+              const payments = await cashfreeService.getCashfreeOrderPayments(orderId);
+              if (payments && payments.length > 0) {
+                const latestPayment = payments[0];
+                console.log(`[Order Status Check] Latest payment for ${orderId}: ${latestPayment.payment_status} - ${latestPayment.payment_message || ''}`);
+                if (latestPayment.payment_status === 'SUCCESS') {
+                  order.status = 'paid';
+                  order.paidAt = latestPayment.payment_time ? new Date(latestPayment.payment_time) : new Date();
+                  order.transactionId = String(latestPayment.cf_payment_id || latestPayment.payment_id || `TXN_${Date.now()}`);
+                  order.paymentMethod = latestPayment.payment_method?.type || 'Online';
+                  order.paymentDetails = latestPayment;
+                  await order.save();
+                  await provisionUserAndSendEmail(order);
+                } else if (latestPayment.payment_status === 'FAILED' || latestPayment.payment_status === 'CANCELLED' || latestPayment.payment_status === 'USER_DROPPED') {
+                  order.status = 'failed';
+                  order.paymentDetails = latestPayment;
+                  await order.save();
+                }
+              }
+            } catch (pErr) {
+              console.warn('[Payments Check Warning]', pErr.message);
+            }
           }
         } catch (checkErr) {
           console.warn('[Status Check Warning]', checkErr.message);
