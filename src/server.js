@@ -56,8 +56,13 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // Health check
 app.get('/api/health', (req, res) => {
+  require('dotenv').config();
   res.json({
     status: 'ok',
+    uptime: Math.round(process.uptime()),
+    smtpConfigured: !!(process.env.SMTP_USER && process.env.SMTP_PASS),
+    smtpUser: process.env.SMTP_USER || null,
+    db: process.env.MONGODB_URI ? process.env.MONGODB_URI.split('@')[1] || 'local' : 'unknown',
     timestamp: new Date(),
     service: 'MockOra Platform API',
   });

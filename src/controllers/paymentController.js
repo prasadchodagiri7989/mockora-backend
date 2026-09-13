@@ -23,24 +23,31 @@ const generateTemporaryPassword = () => {
  * Helper: Provision user and dispatch welcome email once payment is confirmed
  */
 const provisionUserAndSendEmail = async (order) => {
-  if (order.userProvisioned && order.userId) {
+  if (order.userProvisioned && order.userId && order.credentialsSent && order.temporaryPassword) {
     return { alreadyProvisioned: true };
   }
 
   const email = order.email.toLowerCase().trim();
   let user = await User.findOne({ email });
-  let temporaryPassword = null;
+  let temporaryPassword = order.temporaryPassword || null;
 
   if (user) {
     // User already exists in database: link order and update purchased stream
     user.purchasedCategory = order.category;
     user.purchasedOrder = order._id;
     if (order.mobile && !user.phone) user.phone = order.mobile;
+    if (!temporaryPassword) {
+      temporaryPassword = generateTemporaryPassword();
+      user.password = temporaryPassword; // pre-save hook will hash it
+      user.passwordTemporary = true;
+    }
     await user.save();
-    console.log(`[Provisioning] Existing user account updated: ${email}`);
+    console.log(`[Provisioning] Existing user account updated: ${email} with temp password: ${temporaryPassword}`);
   } else {
     // New user: auto-create account with temporary password
-    temporaryPassword = generateTemporaryPassword();
+    if (!temporaryPassword) {
+      temporaryPassword = generateTemporaryPassword();
+    }
     user = new User({
       name: order.name,
       email,
@@ -61,13 +68,14 @@ const provisionUserAndSendEmail = async (order) => {
   // Update order record
   order.userProvisioned = true;
   order.userId = user._id;
+  order.temporaryPassword = temporaryPassword;
 
   // Dispatch confirmation & credentials email
   try {
     const emailResult = await emailService.sendWelcomeEmail({
       toEmail: email,
       customerName: order.name,
-      temporaryPassword: temporaryPassword || '(Your existing password remains active)',
+      temporaryPassword,
       category: order.category,
       orderId: order.cashfreeOrderId,
       transactionId: order.transactionId || order.cfPaymentId || order.cashfreeOrderId,
@@ -75,8 +83,10 @@ const provisionUserAndSendEmail = async (order) => {
       paymentDate: order.paidAt ? new Date(order.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
     });
     order.credentialsSent = emailResult.success;
+    console.log(`[Provisioning] Email sent status for ${email}: ${emailResult.success}`);
   } catch (err) {
     console.error('[Provisioning Email Error]', err);
+    order.credentialsSent = false;
   }
 
   // Increment coupon usedCount if applicable
@@ -330,6 +340,7 @@ exports.getOrderStatus = async (req, res) => {
         paidAt: order.paidAt,
         userProvisioned: order.userProvisioned,
         credentialsSent: order.credentialsSent,
+        temporaryPassword: order.temporaryPassword || '',
         createdAt: order.createdAt,
       },
     });
@@ -427,3 +438,69 @@ exports.getAllTransactions = async (req, res) => {
     res.status(500).json({ success: false, message: err.message || 'Failed to fetch transactions' });
   }
 };
+
+/**
+ * 6. Resend Candidate Credentials Email
+ * POST /api/payments/resend-credentials/:orderId
+ */
+exports.resendCredentialsEmail = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await Order.findOne({ cashfreeOrderId: orderId });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.status !== 'paid') {
+      return res.status(400).json({ success: false, message: 'Cannot dispatch credentials for an unpaid order' });
+    }
+
+    // Ensure order has user and temporaryPassword
+    let passwordToSend = order.temporaryPassword;
+    if (!passwordToSend) {
+      passwordToSend = generateTemporaryPassword();
+      order.temporaryPassword = passwordToSend;
+      if (order.userId) {
+        const user = await User.findById(order.userId);
+        if (user) {
+          user.password = passwordToSend;
+          user.passwordTemporary = true;
+          await user.save();
+        }
+      }
+    }
+
+    const emailResult = await emailService.sendWelcomeEmail({
+      toEmail: order.email,
+      customerName: order.name,
+      temporaryPassword: passwordToSend,
+      category: order.category,
+      orderId: order.cashfreeOrderId,
+      transactionId: order.transactionId || order.cfPaymentId || order.cashfreeOrderId,
+      amountPaid: order.amount,
+      paymentDate: order.paidAt ? new Date(order.paidAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
+    });
+
+    order.credentialsSent = emailResult.success;
+    await order.save();
+
+    if (emailResult.success) {
+      return res.json({
+        success: true,
+        message: `Credentials successfully dispatched to ${order.email}`,
+        temporaryPassword: passwordToSend,
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: `Failed to dispatch email: ${emailResult.error || 'SMTP delivery issue'}`,
+        temporaryPassword: passwordToSend,
+      });
+    }
+  } catch (err) {
+    console.error('Resend credentials error:', err);
+    res.status(500).json({ success: false, message: 'Internal server error while dispatching email' });
+  }
+};
+

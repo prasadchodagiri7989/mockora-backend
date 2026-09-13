@@ -95,6 +95,10 @@ const orderSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  temporaryPassword: {
+    type: String,
+    default: '',
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Order', orderSchema);

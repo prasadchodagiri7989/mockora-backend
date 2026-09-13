@@ -131,3 +131,53 @@ exports.getUserAttemptHistory = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// PUT /api/users/:id/password (Admin - change or reset user password)
+exports.updateUserPassword = async (req, res) => {
+  try {
+    const { newPassword, notifyUser = true } = req.body;
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.trim().length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password must be a valid string of at least 6 characters.',
+      });
+    }
+
+    const user = await User.findById(req.params.id);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found.' });
+    }
+
+    // Set new password (userSchema pre('save') hook will hash it automatically)
+    user.password = newPassword.trim();
+    user.passwordTemporary = false;
+    await user.save();
+
+    console.log(`[Admin Password Change] Password updated for user: ${user.email}`);
+
+    // Optionally dispatch notification email to candidate
+    let emailDispatched = false;
+    if (notifyUser) {
+      try {
+        const emailService = require('../utils/emailService');
+        const emailResult = await emailService.sendPasswordResetNoticeEmail({
+          toEmail: user.email,
+          customerName: user.name,
+          newPassword: newPassword.trim(),
+        });
+        emailDispatched = emailResult.success;
+      } catch (mailErr) {
+        console.warn('[Password Change Email Warning]', mailErr.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Password for ${user.name} (${user.email}) updated successfully.${emailDispatched ? ' Notification email sent to user.' : ''}`,
+      emailSent: emailDispatched,
+    });
+  } catch (error) {
+    console.error('[Admin Password Update Error]', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to update user password.' });
+  }
+};

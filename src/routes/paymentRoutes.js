@@ -15,6 +15,9 @@ router.post('/webhook', paymentController.handleWebhook);
 // Check order status by orderId
 router.get('/status/:orderId', paymentController.getOrderStatus);
 
+// Resend credentials email for an order
+router.post('/resend-credentials/:orderId', paymentController.resendCredentialsEmail);
+
 // Admin: Get all transactions with summary stats
 router.get('/transactions', verifyToken, requireAdmin, paymentController.getAllTransactions);
 
