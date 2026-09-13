@@ -188,8 +188,9 @@ exports.createOrder = async (req, res) => {
     const orderId = `ORD_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
 
     let landingBase = process.env.LANDING_BASE_URL || 'http://localhost:5175';
+    const isProdCashfree = (process.env.CASHFREE_ENV || '').toUpperCase() === 'PRODUCTION' || (process.env.CASHFREE_SECRET_KEY || '').startsWith('cfsk_ma_prod_');
     // Cashfree Production mode strictly enforces https:// in order_meta.return_url
-    if ((process.env.CASHFREE_ENV || '').toUpperCase() === 'PRODUCTION' && !landingBase.startsWith('https://')) {
+    if (isProdCashfree && !landingBase.startsWith('https://')) {
       landingBase = 'https://mockora.neuvexa.in';
     }
     const returnUrl = `${landingBase.replace(/\/$/, '')}/payment/status?order_id=${orderId}`;
@@ -226,7 +227,7 @@ exports.createOrder = async (req, res) => {
       paymentSessionId: cashfreeRes.paymentSessionId,
       amount: finalAmount,
       simulated: cashfreeRes.simulated || false,
-      environment: (process.env.CASHFREE_ENV || 'SANDBOX').toLowerCase(),
+      environment: isProdCashfree ? 'production' : 'sandbox',
     });
   } catch (err) {
     console.error('Create order error:', err);

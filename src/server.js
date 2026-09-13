@@ -80,6 +80,7 @@ app.use('/api/jobs', require('./routes/jobRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
 app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/coupons', require('./routes/couponRoutes'));
 
 // 404 Route handler
 app.use((req, res, next) => {
